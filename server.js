@@ -6,8 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 //post api
-const userRoutes = require('./components/routes/userRoute')
-let isLoggin;
+//const userRoutes = require('./components/routes/userRoute')
 
 const app = express();
 app.use(cors());
@@ -31,42 +30,6 @@ const myMiddleware = (req, res, next) => {
     res.status(400).json({ responsemessage: 'Please enter valid username and password' });
   }
 };
-
-// app.get('/getLogin', myMiddleware, async (req, res) => {
-//   const { username, password } = req.query;
-//     try {
-//       await client.connect();
-//       const database = client.db('testdata');
-//       const collection = database.collection('Edukondalu');
-//       const documents = await collection.find({}).toArray();
-//       let userLoginList = documents.map((el) => ({
-//         user:el.name,
-//         email:el.name,
-//         phone:el.phone,
-//         age:el.age,
-//         password:el.password,
-//         hobbies:el.hobbies
-//       }));
-//       let loginSuccessful = {};
-//       for (let userObj of userLoginList) {
-//         if (userObj.user == username && userObj.password == password) {
-//           loginSuccessful = userObj;
-//           break;
-//         }
-//       }
-  
-//       if (Object.keys(loginSuccessful).length !== 0) {
-//         res.status(200).json({ responsemessage: "Login successful!", loginData:loginSuccessful });
-//       } else {
-//         res.status(401).json({ responsemessage: "Invalid username and password" });
-//       }
-//     } catch (error) {
-//       res.status(500).json({ responsemessage: 'Internal Server Error' });
-//     } finally {
-//       // Close the connection after performing database operations
-//       await client.close();
-//     }
-// });
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -164,26 +127,7 @@ app.get('/getData', async (req, res) => {
     }
 });
 
-app.get('/islogin', (req, res) => {
-  const {state} = req.query;
-  try {
-    if(state === "islogin") {
-      isLoggin = true;
-      res.status(200).json({ state : true });
-    }
-    else if(state === "logout") {
-      isLoggin = false
-      res.status(200).json({ state : false });
-    }
-    else {
-      res.status(200).json({ state : isLoggin });
-    }
-  } catch {
-    res.status(500).json({ error : "Try Again"});
-  }
-})
-
-app.use('/user', userRoutes);
+//app.use('/user', userRoutes);
 
 
 app.listen(port, () => {
