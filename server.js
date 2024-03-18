@@ -18,7 +18,7 @@ const port = 3000;
 const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 const client = new MongoClient(uri);
 
-// Middleware function
+// Middleware functions
 const myMiddleware = (req, res, next) => {
   const { username, password } = req.body;
   if(Object.keys(req.query).length !== 2){
@@ -32,41 +32,37 @@ const myMiddleware = (req, res, next) => {
   }
 };
 
-// app.get('/getLogin', myMiddleware, async (req, res) => {
-//   const { username, password } = req.query;
-//     try {
-//       await client.connect();
-//       const database = client.db('testdata');
-//       const collection = database.collection('Edukondalu');
-//       const documents = await collection.find({}).toArray();
-//       let userLoginList = documents.map((el) => ({
-//         user:el.name,
-//         email:el.name,
-//         phone:el.phone,
-//         age:el.age,
-//         password:el.password,
-//         hobbies:el.hobbies
-//       }));
-//       let loginSuccessful = {};
-//       for (let userObj of userLoginList) {
-//         if (userObj.user == username && userObj.password == password) {
-//           loginSuccessful = userObj;
-//           break;
-//         }
-//       }
-  
-//       if (Object.keys(loginSuccessful).length !== 0) {
-//         res.status(200).json({ responsemessage: "Login successful!", loginData:loginSuccessful });
-//       } else {
-//         res.status(401).json({ responsemessage: "Invalid username and password" });
-//       }
-//     } catch (error) {
-//       res.status(500).json({ responsemessage: 'Internal Server Error' });
-//     } finally {
-//       // Close the connection after performing database operations
-//       await client.close();
-//     }
-// });
+// Function to check if a token is valid
+function checkTokenValidity(token, secretKey) {
+  try {
+    // Verify the token
+    const decoded = jwt.verify(token, secretKey);
+
+    // If verification succeeds, the token is valid
+    return { valid: true, decoded };
+  } catch (error) {
+    // If verification fails, the token is invalid
+    return { valid: false, error: error.message };
+  }
+}
+
+function extractTokenFromHeader(req, res, next) {
+  // Get the Authorization header
+  const authHeader = req.headers['authorization'];
+
+  // Check if the header exists and starts with "Bearer "
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Extract the token (remove "Bearer " from the beginning)
+    const token = authHeader.substring(7);
+
+    // Attach the token to the request object for further processing
+    req.token = token;
+  }
+
+  // Call the next middleware
+  next();
+}
+
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -145,7 +141,7 @@ app.post('/adduser', async (req, res) => {
 });
 
 app.get('/getData', async (req, res) => {
-  const { username, password } = req.query;
+  const { token } = req.query;
     try {
       await client.connect();
       const database = client.db('testdata');
