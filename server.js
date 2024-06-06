@@ -4,11 +4,6 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-
-//post api
-const userRoutes = require('./components/routes/userRoute')
-let isLoggin;
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -18,55 +13,9 @@ const port = 3000;
 const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 const client = new MongoClient(uri);
 
-// Middleware functions
-const myMiddleware = (req, res, next) => {
-  const { username, password } = req.body;
-  if(Object.keys(req.query).length !== 2){
-    res.status(401).json({ responsemessage: "Please Check your payload" });
-  }
-  else if(username.length > 0 && password.length > 0) {
-    next(); // Call the next middleware in the stack
-  }
-  else {
-    res.status(400).json({ responsemessage: 'Please enter valid username and password' });
-  }
-};
-
-// Function to check if a token is valid
-function checkTokenValidity(token, secretKey) {
-  try {
-    // Verify the token
-    const decoded = jwt.verify(token, secretKey);
-
-    // If verification succeeds, the token is valid
-    return { valid: true, decoded };
-  } catch (error) {
-    // If verification fails, the token is invalid
-    return { valid: false, error: error.message };
-  }
-}
-
-function extractTokenFromHeader(req, res, next) {
-  // Get the Authorization header
-  const authHeader = req.headers['authorization'];
-
-  // Check if the header exists and starts with "Bearer "
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    // Extract the token (remove "Bearer " from the beginning)
-    const token = authHeader.substring(7);
-
-    // Attach the token to the request object for further processing
-    req.token = token;
-  }
-
-  // Call the next middleware
-  next();
-}
-
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  console.log(req.body);
   try {
     // Validate input
     if (!username || !password) {
@@ -84,26 +33,24 @@ app.post('/login', async (req, res) => {
 
     // Check if user exists
     if (!user) {
-      return res.status(401).json({ message: 'Invalid username' });
+      return res.status(401).json({ message: 'Invalid username and password' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     //Verify password
     const passwordMatch = await bcrypt.compare(hashedPassword, user.password);
-    console.log(user.password , password);
     if (user.password !== password) {
-      return res.status(401).json({ message: 'Invalid password' });
+      return res.status(401).json({ message: 'Invalid username and password' });
     }
 
     // Generate JWT token
-    const token = jwt.sign({ username: user.username }, 'your_secret_key', { expiresIn: '1h' });
+    const token = jwt.sign({ username: user.username }, 'yedu@007', { expiresIn: '1h' });
 
     // Respond with token
     res.status(200).json({ message: 'Login successful', token: token });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: error?.message });
   } finally {
     // Close MongoDB connection
     await client.close();
@@ -112,7 +59,6 @@ app.post('/login', async (req, res) => {
 
 app.post('/adduser', async (req, res) => {
   const { username, password, age, email } = req.body;
-  console.log(req.body);
   try {
     // Validate input
     if (!username || !password) {
@@ -123,65 +69,154 @@ app.post('/adduser', async (req, res) => {
     await client.connect();
     const database = client.db('testdata');
     const collection = database.collection('Edukondalu');
-    const result = await collection.insertOne({
+    const user = await collection.findOne({ name: username });
+    if (user) return res.status(401).json({ message: 'username already exists !' });
+    await collection.insertOne({
       name: username,
       password: password,
       age: age,
-      email:email
+      email: email
     });
-    console.log(result.insertedId);
-    res.status(200).json({ message: `User registered successfully: ${result.insertedId}` });
+    res.status(200).json({ message: `User registered successfully` });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: error?.message });
   } finally {
     // Close MongoDB connection
     await client.close();
   }
 });
 
-app.get('/getData', async (req, res) => {
-  const { token } = req.query;
-    try {
-      await client.connect();
-      const database = client.db('testdata');
-      const collection = database.collection('Edukondalu');
-      // Perform database operations here
-      // Example: Retrieve documents from the collection
-      const documents = await collection.find({name: 'Srinu'}).toArray();
-      //let userLoginList = documents.map((el) => el);
-      res.status(200).json({"data" : documents });
-    } catch (error) {
-      console.error('Error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    } finally {
-      // Close the connection after performing database operations
-      await client.close();
-    }
-});
-
-app.get('/islogin', (req, res) => {
-  const {state} = req.query;
+app.post('/updateuser', async (req, res) => {
+  const { name , password } = req.body;
   try {
-    if(state === "islogin") {
-      isLoggin = true;
-      res.status(200).json({ state : true });
+    // Validate input
+    if (!name || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
     }
-    else if(state === "logout") {
-      isLoggin = false
-      res.status(200).json({ state : false });
-    }
-    else {
-      res.status(200).json({ state : isLoggin });
-    }
-  } catch {
-    res.status(500).json({ error : "Try Again"});
+
+    // Connect to MongoDB
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+    const user = await collection.findOne({ name });
+    if(!user) return res.status(201).json({ message: 'username details not found !' }); 
+    if(password !== user.password) return res.status(206).json({ message: 'Invalid username and password' });
+    await collection.updateOne({ name },{
+      $set: { ...user, ...req.body } // Update operation, setting the "status" field to "active"
+   });
+    res.status(200).json({ message: `User details updated successfully` });
+  } catch (error) {
+    res.status(500).json({ message: error?.message });
+  } finally {
+    // Close MongoDB connection
+    await client.close();
   }
-})
-
-app.use('/user', userRoutes);
-
-
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
 });
+
+app.post('/deleteuser', async (req, res) => {
+  const { name } = req.body;
+  try {
+    // Validate input
+    if (!name)  return res.status(300).json({ message: "Not Found" });
+    // Connect to MongoDB
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+    await collection.deleteOne({ name });
+    res.status(200).json({ message: `Account deleted successfully` });
+  } catch (error) {
+    res.status(500).json({ message: error?.message });
+  } finally {
+    // Close MongoDB connection
+    await client.close();
+  }
+});
+
+app.post('/getpassword', async (req, res) => {
+  const { username, email } = req.body;
+  try {
+    // Validate input
+    if (!username || !email) {
+      return res.status(400).json({ message: 'Username and email are required' });
+    }
+
+    // Connect to MongoDB
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+
+    // Find user by username
+    const user = await collection.findOne({ name: username });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid username and mail' });
+    }
+    // const hashedPassword = await bcrypt.hash(password, 10);
+    //Verify password
+    //const passwordMatch = await bcrypt.compare(hashedPassword, user.password);
+    if (user.email !== email) {
+      return res.status(401).json({ message: 'Invalid username and password' });
+    }
+    // Respond with token
+    res.status(200).json({ password: user.password });
+  } catch (error) {
+    res.status(500).json({ message: error?.message });
+  } finally {
+    // Close MongoDB connection
+    await client.close();
+  }
+});
+
+app.get('/checkusernameisvalid', async (req, res) => {
+  const { username } = req.query;
+  try {
+    if (!username) return res.status(200).json({ data: null });
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+    const user = await collection.findOne({ name: username });
+    if(user) return res.status(200).json({ data : 'username exists ! try another name.' });
+    res.status(200).json({ data :  'Ok'});
+  } catch (error) {
+    res.status(500).json({ error: error?.message });
+  } finally {
+    await client.close();
+  }
+});
+
+app.get('/getUserData', async (req, res) => {
+  const { name } = req.query;
+  try {
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+    const user = await collection.findOne({ name });
+    res.status(200).json({ data: user });
+  } catch (error) {
+    res.status(500).json({ error: error?.message });
+  } finally {
+    // Close the connection after performing database operations
+    await client.close();
+  }
+});
+
+app.get('/getData', async (req, res) => {
+  try {
+    await client.connect();
+    const database = client.db('testdata');
+    const collection = database.collection('Edukondalu');
+    // Perform database operations here
+    // Example: Retrieve documents from the collection
+    const documents = await collection.find({ name: 'Srinu' }).toArray();
+    //let userLoginList = documents.map((el) => el);
+    res.status(200).json({ "data": documents });
+  } catch (error) {
+    res.status(500).json({ error: error?.message });
+  } finally {
+    // Close the connection after performing database operations
+    await client.close();
+  }
+});
+
+app.listen(port, () => console.log(`Server is running`));
