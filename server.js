@@ -4,14 +4,30 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
 const port = 3000;
 
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, './public/dashboard.html'));
+});
+
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, './public/index.html'));
+});
+
 const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 const client = new MongoClient(uri);
+
+app.post('', async (req, res) => {
+  res.status(500).json({ message: "error?.message" });
+});
 
 
 app.post('/login', async (req, res) => {
@@ -103,7 +119,7 @@ app.post('/updateuser', async (req, res) => {
     if(password !== user.password) return res.status(206).json({ message: 'Invalid username and password' });
     await collection.updateOne({ name },{
       $set: { ...user, ...req.body } // Update operation, setting the "status" field to "active"
-   });
+    });
     res.status(200).json({ message: `User details updated successfully` });
   } catch (error) {
     res.status(500).json({ message: error?.message });
