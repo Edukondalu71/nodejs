@@ -187,15 +187,15 @@ app.post('/getpassword', async (req, res) => {
 app.get('/checkusernameisvalid', async (req, res) => {
   const { username } = req.query;
   try {
-    if (!username) return res.status(200).json({ data: null });
+    if (!username) return res.status(400).json({ data: null });
     await client.connect();
     const database = client.db('testdata');
     const collection = database.collection('Edukondalu');
     const user = await collection.findOne({ name: username });
-    if(user) return res.status(200).json({ data : 'username exists ! try another name.' });
+    if(user) return res.status(204).json({ data : 'username exists ! try another name.' });
     res.status(200).json({ data :  'Ok'});
   } catch (error) {
-    res.status(500).json({ error: error?.message });
+    res.status(500).json({ data: error?.message });
   } finally {
     await client.close();
   }
