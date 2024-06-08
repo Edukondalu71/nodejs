@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edukondalu</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="profile.png" type="image/x-icon">
+</head>
+
+<body>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('login-form').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var username = document.getElementById('username').value;
+                var password = document.getElementById('password').value;
+
+                // Simulating login functionality
+                if (username === 'user' && password === 'password') {
+                    // Login successful
+                    document.getElementById('login-message').textContent = 'Login successful!';
+                    window.location.href = '/dashboard';
+                    // Here you would typically redirect the user to another page
+                } else {
+                    // Login failed
+                    document.getElementById('login-message').textContent = 'Invalid username or password. Please try again.';
+                }
+            });
+        });
+    </script>
+    <div class="login-contaier">
+        <div class="login-box">
+            <img src="./profile.png" />
+            <h2>Member Login</h2>
+            <form id="login-form">
+                <input type="text" id="username" placeholder="Username" />
+                <input type="password" id="password" placeholder="Password" />
+                <button type="submit">Sign In</button>
+            </form>
+            <br />
+            <div id="errormsg-container">
+                <a href="#">Forgot Password?</a>
+            </div>
+
+            <div id="errormsg-container">
+                <p id="login-message"></p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
