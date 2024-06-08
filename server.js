@@ -103,10 +103,10 @@ app.post('/adduser', async (req, res) => {
 });
 
 app.post('/updateuser', async (req, res) => {
-  const { name , password } = req.body;
+  const { name } = req.body;
   try {
     // Validate input
-    if (!name || !password) {
+    if (!name) {
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
@@ -116,7 +116,7 @@ app.post('/updateuser', async (req, res) => {
     const collection = database.collection('Edukondalu');
     const user = await collection.findOne({ name });
     if(!user) return res.status(201).json({ message: 'username details not found !' }); 
-    if(password !== user.password) return res.status(206).json({ message: 'Invalid username and password' });
+    //if(password !== user.password) return res.status(206).json({ message: 'Invalid username and password' });
     await collection.updateOne({ name },{
       $set: { ...user, ...req.body } // Update operation, setting the "status" field to "active"
     });
