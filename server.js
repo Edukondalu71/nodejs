@@ -25,10 +25,6 @@ app.get('/', (req, res) => {
 const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 const client = new MongoClient(uri);
 
-app.post('', async (req, res) => {
-  res.status(500).json({ message: "error?.message" });
-});
-
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -187,12 +183,12 @@ app.post('/getpassword', async (req, res) => {
 app.get('/checkusernameisvalid', async (req, res) => {
   const { username } = req.query;
   try {
-    if (!username) return res.status(400).json({ data: null });
+    if (!username) return res.status(200).json({ data: null });
     await client.connect();
     const database = client.db('testdata');
     const collection = database.collection('Edukondalu');
     const user = await collection.findOne({ name: username });
-    if(user) return res.status(204).json({ data : 'username exists ! try another name.' });
+    if(user) return res.status(200).json({ data : 'username exists ! try another name.' });
     res.status(200).json({ data :  'Ok'});
   } catch (error) {
     res.status(500).json({ data: error?.message });
@@ -224,7 +220,7 @@ app.get('/getData', async (req, res) => {
     const collection = database.collection('Edukondalu');
     // Perform database operations here
     // Example: Retrieve documents from the collection
-    const documents = await collection.find({ name: 'Srinu' }).toArray();
+    const documents = await collection.find({ name: '7' }).toArray();
     //let userLoginList = documents.map((el) => el);
     res.status(200).json({ "data": documents });
   } catch (error) {
