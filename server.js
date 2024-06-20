@@ -1,16 +1,25 @@
 const express = require('express');
 const { MongoClient } = require('mongodb');
 const cors = require('cors');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
+const User = require('./models/user');
+const Message = require('./models/message');
 const port = 3000;
 
+
+const http = require("http").Server(app);
+const socketIO = require("socket.io")(http);
+
+
+//html-renderiong
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/dashboard', (req, res) => {
@@ -21,214 +30,282 @@ app.get('/dashboard', (req, res) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, './public/index.html'));
 });
+////////////////
 
-const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/";
 const client = new MongoClient(uri);
 
+mongoose
+  .connect(uri)
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch(error => {
+    console.log("error", error?.message);
+  });
 
+//Socket
+socketIO.on('connection', socket => {
+  console.log('a user is connected', socket.id);
+  const userSocketMap = {};
+  const userId = socket.handshake.query.userId;
+
+  console.log('userid', userId);
+
+  if (userId !== 'undefined') {
+    userSocketMap[userId] = socket.id;
+  }
+
+  console.log('user socket data', userSocketMap);
+
+  socket.on('disconnect', () => {
+    console.log('user disconnected', socket.id);
+    delete userSocketMap[userId];
+  });
+
+  socket.on('sendMessage', ({ senderId, receiverId, message }) => {
+    const receiverSocketId = userSocketMap[receiverId];
+
+    console.log('receiver Id', receiverId);
+
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('receiveMessage', {
+        senderId,
+        message,
+      });
+    }
+  });
+
+  // socket.on('recieveMessage', ({ senderId, receiverId, message }) => {
+  //   const receiverSocketId = userSocketMap[receiverId];
+
+  //   console.log('receiver Id', receiverId);
+
+  //   if (receiverSocketId) {
+  //     io.to(receiverSocketId).emit('receiveMessage', {
+  //       senderId,
+  //       message,
+  //     });
+  //   }
+  // });
+});
+
+const userSocketMap = {};
+
+// app.get('/user/:userId', async (req, res) => {
+//   try {
+//     const userId = req.params.userId;
+
+//     const users = await User.findById(userId).populate(
+//       'friends',
+//       'name email',
+//     );
+
+//     res.json(users.friends);
+//   } catch (error) {
+//     console.log('Error fetching user', error);
+//   }
+// });
+
+app.post('/sendMessage', async (req, res) => {
+  try {
+    const { senderId, receiverId, message } = req.body;
+    const newMessage = new Message({
+      senderId,
+      receiverId,
+      message,
+    });
+
+    await newMessage.save();
+
+    const receiverSocketId = userSocketMap[receiverId];
+
+    if (receiverSocketId) {
+      console.log('emitting recieveMessage event to the reciver', receiverId);
+      io.to(receiverSocketId).emit('newMessage', newMessage);
+    } else {
+      console.log('Receiver socket ID not found');
+    }
+
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.log('ERROR', error);
+  }
+});
+
+app.get('/messages', async (req, res) => {
+  try {
+    const { senderId, receiverId } = req.query;
+
+    const messages = await Message.find({
+      $or: [
+        { senderId: senderId, receiverId: receiverId },
+        { senderId: receiverId, receiverId: senderId },
+      ],
+    }).populate('senderId', '_id name');
+
+    res.status(200).json(messages);
+  } catch (error) {
+    console.log('Error', error);
+  }
+});
+
+
+//Login_Api's
 app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
   try {
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required' });
-    }
-
-    // Connect to MongoDB
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-
-    // Find user by username
-    let name = username
-    const user = await collection.findOne({ name });
-
-    // Check if user exists
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
     if (!user) {
-      return res.status(401).json({ message: 'Invalid username and password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    //Verify password
-    const passwordMatch = await bcrypt.compare(hashedPassword, user.password);
     if (user.password !== password) {
-      return res.status(401).json({ message: 'Invalid username and password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    // Generate JWT token
-    const token = jwt.sign({ username: user.username }, 'yedu@007', { expiresIn: '1h' });
-
-    // Respond with token
-    res.status(200).json({ message: 'Login successful', token: token });
+    const secretKey = crypto.randomBytes(32).toString('hex');
+    const token = jwt.sign({ userId: user._id }, secretKey);
+    res.status(200).json({ token });
   } catch (error) {
+    console.log('error loggin in', error);
     res.status(500).json({ message: error?.message });
-  } finally {
-    // Close MongoDB connection
-    await client.close();
   }
 });
 
-app.post('/adduser', async (req, res) => {
-  const { username, password, age, email } = req.body;
-  try {
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required' });
-    }
+app.post('/register', async (req, res) => {
+  const { username, email, password, mobilenumber } = req.body;
 
-    // Connect to MongoDB
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    const user = await collection.findOne({ name: username });
-    if (user) return res.status(401).json({ message: 'username already exists !' });
-    await collection.insertOne({
-      name: username,
-      password: password,
-      age: age,
-      email: email
+  const newUser = new User({ username, email, password, mobilenumber });
+
+  newUser
+    .save()
+    .then(() => {
+      res.status(200).json({ message: 'User registered succesfully!' });
+    })
+    .catch(error => {
+      console.log('Error creating a user');
+      res.status(500).json({ message: error?.message });
     });
-    res.status(200).json({ message: `User registered successfully` });
-  } catch (error) {
-    res.status(500).json({ message: error?.message });
-  } finally {
-    // Close MongoDB connection
-    await client.close();
-  }
-});
-
-app.post('/updateuser', async (req, res) => {
-  const { name } = req.body;
-  try {
-    // Validate input
-    if (!name) {
-      return res.status(400).json({ message: 'Username and password are required' });
-    }
-
-    // Connect to MongoDB
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    const user = await collection.findOne({ name });
-    if(!user) return res.status(201).json({ message: 'username details not found !' }); 
-    //if(password !== user.password) return res.status(206).json({ message: 'Invalid username and password' });
-    await collection.updateOne({ name },{
-      $set: { ...user, ...req.body } // Update operation, setting the "status" field to "active"
-    });
-    res.status(200).json({ message: `User details updated successfully` });
-  } catch (error) {
-    res.status(500).json({ message: error?.message });
-  } finally {
-    // Close MongoDB connection
-    await client.close();
-  }
-});
-
-app.post('/deleteuser', async (req, res) => {
-  const { name } = req.body;
-  try {
-    // Validate input
-    if (!name)  return res.status(300).json({ message: "Not Found" });
-    // Connect to MongoDB
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    await collection.deleteOne({ name });
-    res.status(200).json({ message: `Account deleted successfully` });
-  } catch (error) {
-    res.status(500).json({ message: error?.message });
-  } finally {
-    // Close MongoDB connection
-    await client.close();
-  }
-});
-
-app.post('/getpassword', async (req, res) => {
-  const { username, email } = req.body;
-  try {
-    // Validate input
-    if (!username || !email) {
-      return res.status(400).json({ message: 'Username and email are required' });
-    }
-
-    // Connect to MongoDB
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-
-    // Find user by username
-    const user = await collection.findOne({ name: username });
-
-    // Check if user exists
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid username and mail' });
-    }
-    // const hashedPassword = await bcrypt.hash(password, 10);
-    //Verify password
-    //const passwordMatch = await bcrypt.compare(hashedPassword, user.password);
-    if (user.email !== email) {
-      return res.status(401).json({ message: 'Invalid username and password' });
-    }
-    // Respond with token
-    res.status(200).json({ password: user.password });
-  } catch (error) {
-    res.status(500).json({ message: error?.message });
-  } finally {
-    // Close MongoDB connection
-    await client.close();
-  }
 });
 
 app.get('/checkusernameisvalid', async (req, res) => {
   const { username } = req.query;
   try {
-    if (!username) return res.status(200).json({ data: null });
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    const user = await collection.findOne({ name: username });
-    if(user) return res.status(200).json({ data : 'username exists ! try another name.' });
-    res.status(200).json({ data :  'Ok'});
-  } catch (error) {
-    res.status(500).json({ data: error?.message });
-  } finally {
-    await client.close();
+    const user = await User.findOne({ username });
+    if (user) res.status(401).json({ data: "username already exisits !" });
+    return res.status(200).json({ data: "OK" });
   }
+  catch (error) {
+    return res.status(500).json({ data: error?.message });
+  }
+
 });
 
 app.get('/getUserData', async (req, res) => {
-  const { name } = req.query;
+  const { username } = req.query;
   try {
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    const user = await collection.findOne({ name });
-    res.status(200).json({ data: user });
-  } catch (error) {
-    res.status(500).json({ error: error?.message });
-  } finally {
-    // Close the connection after performing database operations
-    await client.close();
+    const user = await User.findOne({ username });
+    if (!user) res.status(401).json({ data: "username details not found !" });
+    return res.status(200).json({ data: user });
+  }
+  catch (error) {
+    return res.status(500).json({ data: error?.message });
   }
 });
 
-app.get('/getData', async (req, res) => {
+app.get('/getusers', async (req, res) => {
   try {
-    await client.connect();
-    const database = client.db('testdata');
-    const collection = database.collection('Edukondalu');
-    // Perform database operations here
-    // Example: Retrieve documents from the collection
-    const documents = await collection.find({ name: '7' }).toArray();
-    //let userLoginList = documents.map((el) => el);
-    res.status(200).json({ "data": documents });
+    const users = await User.db.collection('users').find().toArray();
+    //if (!user) res.status(401).json({ data: "username details not found !" });
+    return res.status(200).json({ data: users });
+  }
+  catch (error) {
+    return res.status(500).json({ data: error?.message });
+  }
+});
+
+app.post('/sendrequest', async (req, res) => {
+  const { senderId, receiverId, message } = req.body;
+  const receiver = await User.findById(receiverId);
+  if (!receiver) {
+    return res.status(404).json({ message: 'Receiver not found' });
+  }
+
+  receiver.requests.push({ from: senderId, message });
+  await receiver.save();
+
+  res.status(200).json({ message: 'Request sent succesfully' });
+});
+
+app.get('/getrequests/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findById(userId).populate(
+      'requests.from',
+      'name email',
+    );
+
+    if (user) {
+      res.json(user.requests);
+    } else {
+      res.status(400);
+      throw new Error('User not found');
+    }
   } catch (error) {
-    res.status(500).json({ error: error?.message });
-  } finally {
-    // Close the connection after performing database operations
-    await client.close();
+    console.log('error', error);
+  }
+});
+
+app.post('/acceptrequest', async (req, res) => {
+  try {
+    const { userId, requestId } = req.body;
+    console.log(req.body);
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $pull: { requests: { from: requestId } },
+      },
+      { new: true },
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $push: { friends: requestId },
+    });
+
+    const friendUser = await User.findByIdAndUpdate(requestId, {
+      $push: { friends: userId },
+    });
+
+    if (!friendUser) {
+      return res.status(404).json({ message: 'Friend not found' });
+    }
+
+    res.status(200).json({ message: 'Request accepted sucesfully' });
+  } catch (error) {
+    console.log('Error', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+app.get('/user/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const users = await User.findById(userId).populate('friends', 'username');
+    res.json(users.friends);
+  } catch (error) {
+    console.log('Error fetching user', error?.message);
+    return null;
   }
 });
 
 app.listen(port, () => console.log(`Server is running`));
+http.listen(4000, () => console.log(`Socket is running`));
+////////////
