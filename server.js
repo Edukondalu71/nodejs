@@ -1,5 +1,4 @@
 const express = require('express');
-const { MongoClient } = require('mongodb');
 const cors = require('cors');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -30,10 +29,13 @@ app.get('/dashboard', (req, res) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, './public/index.html'));
 });
+
+// app.get('*', (req, res) => {
+//   res.sendFile(path.join(__dirname, './public/index.html'));
+// });
 ////////////////
 
 const uri = "mongodb+srv://yedu7668:yedu007@cluster0.qq01a8o.mongodb.net/";
-const client = new MongoClient(uri);
 
 mongoose
   .connect(uri)
@@ -45,67 +47,37 @@ mongoose
   });
 
 //Socket
+const userSocketMap = {};
 socketIO.on('connection', socket => {
-  console.log('a user is connected', socket.id);
-  const userSocketMap = {};
+  //console.log('a user is connected', socket.id);
   const userId = socket.handshake.query.userId;
 
-  console.log('userid', userId);
+  //console.log('userid', userId);
 
   if (userId !== 'undefined') {
     userSocketMap[userId] = socket.id;
   }
 
-  console.log('user socket data', userSocketMap);
+  //console.log('user socket data', userSocketMap);
 
   socket.on('disconnect', () => {
-    console.log('user disconnected', socket.id);
-    delete userSocketMap[userId];
+    //console.log('user disconnected', socket.id);
+    //delete userSocketMap[userId];
   });
 
   socket.on('sendMessage', ({ senderId, receiverId, message }) => {
     const receiverSocketId = userSocketMap[receiverId];
 
-    console.log('receiver Id', receiverId);
+    //console.log('receiver Id', receiverId);
 
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit('receiveMessage', {
+      socketIO.to(receiverSocketId).emit('receiveMessage', {
         senderId,
         message,
       });
     }
   });
-
-  // socket.on('recieveMessage', ({ senderId, receiverId, message }) => {
-  //   const receiverSocketId = userSocketMap[receiverId];
-
-  //   console.log('receiver Id', receiverId);
-
-  //   if (receiverSocketId) {
-  //     io.to(receiverSocketId).emit('receiveMessage', {
-  //       senderId,
-  //       message,
-  //     });
-  //   }
-  // });
 });
-
-const userSocketMap = {};
-
-// app.get('/user/:userId', async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-
-//     const users = await User.findById(userId).populate(
-//       'friends',
-//       'name email',
-//     );
-
-//     res.json(users.friends);
-//   } catch (error) {
-//     console.log('Error fetching user', error);
-//   }
-// });
 
 app.post('/sendMessage', async (req, res) => {
   try {
@@ -121,15 +93,15 @@ app.post('/sendMessage', async (req, res) => {
     const receiverSocketId = userSocketMap[receiverId];
 
     if (receiverSocketId) {
-      console.log('emitting recieveMessage event to the reciver', receiverId);
-      io.to(receiverSocketId).emit('newMessage', newMessage);
+      //console.log('emitting recieveMessage event to the reciver', receiverId);
+      socketIO.to(receiverSocketId).emit('newMessage', newMessage);
     } else {
       console.log('Receiver socket ID not found');
     }
 
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log('ERROR', error);
+    console.log('ERROR', error?.message);
   }
 });
 
@@ -146,7 +118,7 @@ app.get('/messages', async (req, res) => {
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log('Error', error);
+    console.log('Error', error?.message);
   }
 });
 
@@ -166,7 +138,7 @@ app.post('/login', async (req, res) => {
     const token = jwt.sign({ userId: user._id }, secretKey);
     res.status(200).json({ token });
   } catch (error) {
-    console.log('error loggin in', error);
+    console.log('error loggin in', error?.message);
     res.status(500).json({ message: error?.message });
   }
 });
@@ -182,7 +154,7 @@ app.post('/register', async (req, res) => {
       res.status(200).json({ message: 'User registered succesfully!' });
     })
     .catch(error => {
-      console.log('Error creating a user');
+      console.log('Error creating a user', error?.message);
       res.status(500).json({ message: error?.message });
     });
 });
@@ -212,11 +184,16 @@ app.get('/getUserData', async (req, res) => {
   }
 });
 
-app.get('/getusers', async (req, res) => {
+app.get('/getusers/:userId', async (req, res) => {
   try {
-    const users = await User.db.collection('users').find().toArray();
-    //if (!user) res.status(401).json({ data: "username details not found !" });
-    return res.status(200).json({ data: users });
+    const userId = req.params.userId;
+    let users = await User.db.collection('users').find().toArray();
+    const user = await User.findOne({ _id: userId });
+
+    if (user) {
+      filterList = users.filter((el) => !user?.friends.includes(el["_id"]));
+      return res.status(200).json({ data: filterList });
+    } else return res.status(200).json({ data: users });
   }
   catch (error) {
     return res.status(500).json({ data: error?.message });
@@ -241,7 +218,7 @@ app.get('/getrequests/:userId', async (req, res) => {
     const userId = req.params.userId;
     const user = await User.findById(userId).populate(
       'requests.from',
-      'name email',
+      'username email',
     );
 
     if (user) {
@@ -251,14 +228,13 @@ app.get('/getrequests/:userId', async (req, res) => {
       throw new Error('User not found');
     }
   } catch (error) {
-    console.log('error', error);
+    console.log('error', error?.message);
   }
 });
 
 app.post('/acceptrequest', async (req, res) => {
   try {
     const { userId, requestId } = req.body;
-    console.log(req.body);
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -290,7 +266,7 @@ app.post('/acceptrequest', async (req, res) => {
 
     res.status(200).json({ message: 'Request accepted sucesfully' });
   } catch (error) {
-    console.log('Error', error);
+    console.log('Error', error?.message);
     res.status(500).json({ message: 'Server Error' });
   }
 });
