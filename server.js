@@ -11,7 +11,8 @@ app.use(express.json());
 app.use(bodyParser.json());
 const User = require('./models/user');
 const Message = require('./models/message');
-const port = 3000;
+const SERVER_PORT = process.env.SERVER_PORT || 3000;
+const SOCKET_PORT = process.env.SOCKET_PORT || 4000;
 
 
 const http = require("http").Server(app);
@@ -282,6 +283,5 @@ app.get('/user/:userId', async (req, res) => {
   }
 });
 
-app.listen(port, () => console.log(`Server is running`));
-http.listen(4000, () => console.log(`Socket is running`));
-////////////
+//app.listen(SERVER_PORT, () => console.log(`Server is running`));
+http.listen(SERVER_PORT, () => console.log(`Socket is running`));
