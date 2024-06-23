@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
   image: {
     type: String,
   },
+  fcmToken: {
+    type: String,
+    required: true,
+  },
   requests: [
     {
       from: {
