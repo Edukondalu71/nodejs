@@ -11,12 +11,22 @@ app.use(express.json());
 app.use(bodyParser.json());
 const User = require('./models/user');
 const Message = require('./models/message');
+const firebase = require("firebase-admin");
 const SERVER_PORT = process.env.SERVER_PORT || 3000;
-const SOCKET_PORT = process.env.SOCKET_PORT || 4000;
 
 
 const http = require("http").Server(app);
 const socketIO = require("socket.io")(http);
+
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  // Optional: define the databaseURL. This is required if you are using Firebase Realtime Database or Firestore.
+  // databaseURL: 'YOUR_DATABASE_URL'
+});
+
 
 
 //html-renderiong
@@ -80,6 +90,41 @@ socketIO.on('connection', socket => {
   });
 });
 
+const sendNotification = async (senderId, receiverId, message) => {
+  console.log("notification data received")
+
+  try {
+    let reciever = await User.findById(receiverId);
+    let sender = await User.findById(senderId);
+
+    // console.log("findUserfindUser", findUser)
+    if (!!reciever?.fcmToken) {
+      let notificationPayload = {
+        sender: sender?.username,
+        recieverId: receiverId,
+        message: message
+      }
+
+      let res = await firebase.messaging().send({
+        token: reciever?.fcmToken,
+        notification: {
+          title: sender?.username,
+          body: message,
+        },
+        data: {
+          notification_type: "chat",
+          navigationId: 'ChatRoom',
+          data: JSON.stringify(notificationPayload)
+        }
+      })
+      console.log("notification send successfully...!!!!", res)
+    }
+
+  } catch (error) {
+    console.log("notification failed", error?.message)
+  }
+}
+
 app.post('/sendMessage', async (req, res) => {
   try {
     const { senderId, receiverId, message } = req.body;
@@ -90,9 +135,8 @@ app.post('/sendMessage', async (req, res) => {
     });
 
     await newMessage.save();
-
+    sendNotification(senderId, receiverId, message)
     const receiverSocketId = userSocketMap[receiverId];
-
     if (receiverSocketId) {
       //console.log('emitting recieveMessage event to the reciver', receiverId);
       socketIO.to(receiverSocketId).emit('newMessage', newMessage);
@@ -127,7 +171,7 @@ app.get('/messages', async (req, res) => {
 //Login_Api's
 app.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, fcmToken } = req.body;
     const user = await User.findOne({ username });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -137,6 +181,10 @@ app.post('/login', async (req, res) => {
     }
     const secretKey = crypto.randomBytes(32).toString('hex');
     const token = jwt.sign({ userId: user._id }, secretKey);
+    await User.updateOne(
+      { username }, // Filter
+      { $set: { fcmToken: fcmToken } } // Update operation
+    )
     res.status(200).json({ token });
   } catch (error) {
     console.log('error loggin in', error?.message);
@@ -145,10 +193,8 @@ app.post('/login', async (req, res) => {
 });
 
 app.post('/register', async (req, res) => {
-  const { username, email, password, mobilenumber } = req.body;
-
-  const newUser = new User({ username, email, password, mobilenumber });
-
+  const { username, email, password, mobilenumber, fcmToken } = req.body;
+  const newUser = new User({ ...req.body });
   newUser
     .save()
     .then(() => {
@@ -211,7 +257,7 @@ app.post('/sendrequest', async (req, res) => {
   receiver.requests.push({ from: senderId, message });
   await receiver.save();
 
-  res.status(200).json({ message: 'Request sent succesfully' });
+  res.status(200).json({ message: 'Request sent' });
 });
 
 app.get('/getrequests/:userId', async (req, res) => {
@@ -265,7 +311,7 @@ app.post('/acceptrequest', async (req, res) => {
       return res.status(404).json({ message: 'Friend not found' });
     }
 
-    res.status(200).json({ message: 'Request accepted sucesfully' });
+    res.status(200).json({ message: 'Request accepted.' });
   } catch (error) {
     console.log('Error', error?.message);
     res.status(500).json({ message: 'Server Error' });
