@@ -28,7 +28,6 @@ admin.initializeApp({
 });
 
 
-
 //html-renderiong
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -59,40 +58,86 @@ mongoose
 
 //Socket
 const userSocketMap = {};
-socketIO.on('connection', socket => {
-  //console.log('a user is connected', socket.id);
+socketIO.on('connection', async socket => {
+
+
   const userId = socket.handshake.query.userId;
 
-  //console.log('userid', userId);
+  socket.broadcast.emit('online', { active: userId });
 
-  if (userId !== 'undefined') {
-    userSocketMap[userId] = socket.id;
-  }
+  await User.updateOne(
+    { _id: userId }, // Filter
+    { $set: { lastActive: "Online" } } // Update operation
+  )
+
+  if (userId !== 'undefined') userSocketMap[userId] = socket.id;
 
   //console.log('user socket data', userSocketMap);
 
-  socket.on('disconnect', () => {
-    //console.log('user disconnected', socket.id);
+  socket.on('disconnect', async () => {
+    //socket.broadcast.emit('offline', { active: userId });
+    await User.updateOne(
+      { _id: userId }, // Filter
+      { $set: { lastActive: new Date() } } // Update operation
+    )
+    delete userSocketMap[userId];
+  });
+
+  socket.on('close', async ({ userId }) => {
+    socket.broadcast.emit('offline', { active: userId });
+    await User.updateOne(
+      { _id: userId }, // Filter
+      { $set: { lastActive: new Date() } } // Update operation
+    )
     //delete userSocketMap[userId];
   });
 
   socket.on('sendMessage', ({ senderId, receiverId, message }) => {
     const receiverSocketId = userSocketMap[receiverId];
-
     //console.log('receiver Id', receiverId);
-
     if (receiverSocketId) {
       socketIO.to(receiverSocketId).emit('receiveMessage', {
         senderId,
+        receiverId,
         message,
       });
     }
   });
+  socket.on('updateLastMessage', ({ senderId, receiverId, message }) => {
+    const receiverSocketId = userSocketMap[senderId];
+    //console.log('receiver Id', receiverId);
+    if (receiverSocketId) {
+      socketIO.to(receiverSocketId).emit('receiveMessage', {
+        senderId,
+        receiverId,
+        message,
+      });
+    }
+  });
+
+  socket.on('is_typing', ({ recieverId }) => {
+    const receiverSocketId = userSocketMap[recieverId];
+    if (receiverSocketId) {
+      socketIO.to(receiverSocketId).emit('typing', { state: "typing..." });
+    } else {
+      // Handle case where recipient socket ID is not found
+      console.log('Recipient socket ID not found');
+    }
+  })
+
+  socket.on('stop_typing', ({ recieverId }) => {
+    const receiverSocketId = userSocketMap[recieverId];
+    if (receiverSocketId) {
+      socketIO.to(receiverSocketId).emit('typing', { state: "" });
+    } else {
+      // Handle case where recipient socket ID is not found
+      console.log('Recipient socket ID not found');
+    }
+  })
+
 });
 
 const sendNotification = async (senderId, receiverId, message) => {
-  console.log("notification data received")
-
   try {
     let reciever = await User.findById(receiverId);
     let sender = await User.findById(senderId);
@@ -117,11 +162,10 @@ const sendNotification = async (senderId, receiverId, message) => {
           data: JSON.stringify(notificationPayload)
         }
       })
-      console.log("notification send successfully...!!!!", res)
     }
 
   } catch (error) {
-    console.log("notification failed", error?.message)
+    //console.log("notification failed", error?.message)
   }
 }
 
@@ -193,7 +237,6 @@ app.post('/login', async (req, res) => {
 });
 
 app.post('/register', async (req, res) => {
-  const { username, email, password, mobilenumber, fcmToken } = req.body;
   const newUser = new User({ ...req.body });
   newUser
     .save()
@@ -256,7 +299,7 @@ app.post('/sendrequest', async (req, res) => {
 
   receiver.requests.push({ from: senderId, message });
   await receiver.save();
-
+  sendNotification(senderId, receiverId, message);
   res.status(200).json({ message: 'Request sent' });
 });
 
@@ -310,7 +353,7 @@ app.post('/acceptrequest', async (req, res) => {
     if (!friendUser) {
       return res.status(404).json({ message: 'Friend not found' });
     }
-
+    sendNotification(userId, requestId, `Request accepted.`);
     res.status(200).json({ message: 'Request accepted.' });
   } catch (error) {
     console.log('Error', error?.message);
@@ -326,6 +369,29 @@ app.get('/user/:userId', async (req, res) => {
   } catch (error) {
     console.log('Error fetching user', error?.message);
     return null;
+  }
+});
+
+app.get('/active/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const users = await User.findById(userId);
+    res.json({ timestamp: users.lastActive });
+  } catch (error) {
+    console.log('Error fetching user', error?.message);
+    return null;
+  }
+});
+
+app.get('/isValid/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findById(userId)
+    if(!user) res.status(400).json({});
+    res.status(200).json({});
+  } catch (error) {
+    console.log('Error fetching user', error?.message);
+    res.status(500).json({});
   }
 });
 
