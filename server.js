@@ -75,7 +75,7 @@ socketIO.on('connection', async socket => {
   //console.log('user socket data', userSocketMap);
 
   socket.on('disconnect', async () => {
-    //socket.broadcast.emit('offline', { active: userId });
+    socket.broadcast.emit('offline', { active: userId });
     await User.updateOne(
       { _id: userId }, // Filter
       { $set: { lastActive: new Date() } } // Update operation
