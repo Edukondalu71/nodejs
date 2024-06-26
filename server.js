@@ -155,6 +155,7 @@ const sendNotification = async (senderId, receiverId, message) => {
         notification: {
           title: sender?.username,
           body: message,
+          imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQvMxis0Ie8A6F1_-l2aHWRJzwZa4zkhnsbCeAxy3jd1ZQTKXWRhNHcQfikSUgNCE0qTwY&usqp=CAU'
         },
         data: {
           notification_type: "chat",
