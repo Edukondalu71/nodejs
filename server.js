@@ -155,7 +155,7 @@ const sendNotification = async (senderId, receiverId, message) => {
         notification: {
           title: sender?.username,
           body: message,
-          imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQvMxis0Ie8A6F1_-l2aHWRJzwZa4zkhnsbCeAxy3jd1ZQTKXWRhNHcQfikSUgNCE0qTwY&usqp=CAU'
+          imageUrl: 'https://www.unprofessional.store/cdn/shop/collections/balayya-removebg-preview.png?v=1670366079'
         },
         data: {
           notification_type: "chat",
