@@ -139,11 +139,11 @@ socketIO.on('connection', async socket => {
 
 const sendNotification = async (senderId, receiverId, message) => {
   try {
-    let reciever = await User.findById(receiverId);
+    let receiver = await User.findById(receiverId);
     let sender = await User.findById(senderId);
 
     // console.log("findUserfindUser", findUser)
-    if (!!reciever?.fcmToken) {
+    if (!!receiver?.fcmToken) {
       let notificationPayload = {
         sender: sender?.username,
         recieverId: receiverId,
@@ -151,22 +151,27 @@ const sendNotification = async (senderId, receiverId, message) => {
       }
 
       let res = await firebase.messaging().send({
-        token: reciever?.fcmToken,
+        token: receiver?.fcmToken,
         notification: {
           title: sender?.username,
           body: message,
-          imageUrl: 'https://www.unprofessional.store/cdn/shop/collections/balayya-removebg-preview.png?v=1670366079'
+          icon: 'notification_icon',  // Replace with the name of your notification icon (without extension)
+          imageUrl: 'https://www.unprofessional.store/cdn/shop/collections/balayya-removebg-preview.png?v=1670366079'  // Optional: If you also want to include an image
         },
         data: {
           notification_type: "chat",
           navigationId: 'ChatRoom',
           data: JSON.stringify(notificationPayload)
+        },
+        android: {
+          collapseKey: 'chat_message'  // Optional: Example of using collapse key
         }
-      })
+      });
+      
     }
 
   } catch (error) {
-    //console.log("notification failed", error?.message)
+    console.log("notification failed", error?.message)
   }
 }
 
