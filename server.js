@@ -145,17 +145,16 @@ const sendNotification = async (senderId, receiverId, message) => {
     // console.log("findUserfindUser", findUser)
     if (!!receiver?.fcmToken) {
       let notificationPayload = {
-        sender: sender?.username,
+        sender: atob(sender?.username),
         recieverId: receiverId,
-        message: message
+        message: atob(message)
       }
 
       let res = await firebase.messaging().send({
-        token: receiver?.fcmToken,
+        token: atob(receiver?.fcmToken),
         notification: {
-          title: sender?.username,
-          body: message,
-          icon: 'notification_icon',  // Replace with the name of your notification icon (without extension)
+          title: atob(sender?.username),
+          body: atob(message),
           imageUrl: 'https://www.unprofessional.store/cdn/shop/collections/balayya-removebg-preview.png?v=1670366079'  // Optional: If you also want to include an image
         },
         data: {
@@ -164,10 +163,10 @@ const sendNotification = async (senderId, receiverId, message) => {
           data: JSON.stringify(notificationPayload)
         },
         android: {
-          collapseKey: 'chat_message'  // Optional: Example of using collapse key
+          collapseKey: sender?.username
         }
       });
-      
+
     }
 
   } catch (error) {
@@ -393,11 +392,13 @@ app.get('/isValid/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
     const user = await User.findById(userId)
-    if(!user) res.status(400).json({});
-    res.status(200).json({});
+    if (!user) {
+      return res.status(203).json({ data: "User Not Found" });
+    }
+    res.status(200).json({ data: "Valid User" });
   } catch (error) {
     console.log('Error fetching user', error?.message);
-    res.status(500).json({});
+    res.status(500).json({ data: error?.message });
   }
 });
 
